@@ -1,0 +1,56 @@
+Configuration:
+  status: warn
+
+  Appenders:
+    Console:
+      name: DetailedConsole
+      target: SYSTEM_OUT
+      PatternLayout:
+        Pattern: "%d{HH:mm:ss.SSS} %l %marker [%t] %-5level %logger{36} :: %msg%n"
+
+    RandomAccessFile:
+      - name: RX_APPENDER
+        fileName: logs/rx.log
+        append: false
+        PatternLayout:
+            Pattern: "%d{HH:mm:ss.SSS} %l %marker [%t] %-5level %logger{36} :: %msg%n"
+      - name: SQL_APPENDER
+        fileName: logs/sql.log
+        append: false
+        PatternLayout:
+          Pattern: "%d{ISO8601_BASIC} %-5level %logger{1} %X %msg%n"
+      - name: PAYLOAD_APPENDER
+        fileName: logs/payload.log
+        append: false
+        PatternLayout:
+          Pattern: "%d{ISO8601_BASIC} %-5level %logger{1} %X %msg%n"
+      - name: PERFORMANCE_APPENDER
+        fileName: logs/performance.log
+        append: false
+        ##JSONLayout:
+        ##  complete: true
+        RFC5424Layout:   ## Enhanced Syslog specification
+          appName: VertxPoints
+          newLine: true
+
+    Routing:
+      name: MARKER_ROUTING_APPENDER
+      Routes:
+        pattern: "$${marker:}"
+        Route:
+        - key: performance
+          ref: PERFORMANCE_APPENDER
+        - key: PAYLOAD
+          ref: PAYLOAD_APPENDER
+        - key: SQL
+          ref: SQL_APPENDER
+        - key: security   # matches the marker "security" and routes to the named appender
+          ref: DetailedConsole
+
+  Loggers:
+    Root:
+      level: debug
+      AppenderRef:
+        - ref: MARKER_ROUTING_APPENDER # enforces that logging in the code must include a marker otherwise nothing will appear
+        - ref: DetailedConsole
+        - ref: RX_APPENDER
