@@ -1,0 +1,17 @@
+.idea
+*.iml
+*.class
+target
+
+# Package Files #
+*.jar
+*.war
+*.ear
+
+
+hs_err_pid*
+
+/build
+/logs
+/out
+/.gradle
