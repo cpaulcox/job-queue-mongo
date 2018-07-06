@@ -1,19 +1,30 @@
 package mongo
 
+import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
+import com.mongodb.client.MongoCollection
 import com.mongodb.client.model.IndexOptions
 import com.mongodb.client.model.Indexes
+import org.bson.conversions.Bson
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.litote.kmongo.* //NEEDED! import KMongo extensions
 import java.time.LocalDateTime
 import java.time.temporal.ChronoUnit
-import org.litote.kmongo.MongoOperator.set
+import org.litote.kmongo.MongoOperator.*
+import java.time.ZoneId
+import java.time.ZoneOffset
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.util.*
 import java.util.concurrent.TimeUnit
 
 class MongoPing {
+
+    @BeforeEach
+    fun initKotlinMapper() {
+        val mapper = jacksonObjectMapper()
+    }
 
     @Test
     fun connectionTest()  {
@@ -48,8 +59,15 @@ class MongoPing {
         col.createIndex(Indexes.ascending("createdOn"),
                         IndexOptions().expireAfter(1L, TimeUnit.MINUTES))
 
+        col.createIndex(Indexes.ascending("createdOn", "status"))
+
+
+        // ZonedDateTime.now( ZoneOffset.UTC ) // convert to UTC
+
+        println("UTC Time: ${ZonedDateTime.now( ZoneOffset.UTC )}")
+
         val job = Job(startTime = LocalDateTime.now().minusDays(3).truncatedTo(ChronoUnit.MILLIS),  // Mongo can only store to millis precision breaks "equals"
-                        createdOn = LocalDateTime.now().truncatedTo(ChronoUnit.MILLIS),
+                        //createdOn = ZonedDateTime.now().truncatedTo(ChronoUnit.MILLIS),
                         endTime = LocalDateTime.now().plusDays(4).truncatedTo(ChronoUnit.MILLIS),
                         payload = SimplePayload("p1", "paul"))
 
@@ -79,7 +97,71 @@ class MongoPing {
         assertEquals(job.jobId, job3?.jobId)  // jobs3 can be null
 
         col.find().forEach(::println)
+
+        val job4 = col.find1(Job<SimplePayload>::priority eq 1)
+
+        when (job4) {
+            None -> println("Not found")
+            is Some<Job<*>> -> println("Monad... ${job4.value.priority}")  // smart cast ignores payload type
+        }
+
+
+
     }
+
+    @Test
+    fun headOfQueue() {
+        val client = KMongo.createClient() //get com.mongodb.MongoClient new instance
+        val database = client.getDatabase("work") //normal java driver usage
+
+
+        val col = database.getCollection<Job<SimplePayload>>("queue")
+        col.drop()
+        col.createIndex(Indexes.ascending("createdOn"),
+                IndexOptions().expireAfter(1L, TimeUnit.MINUTES))
+
+        col.createIndex(Indexes.ascending("createdOn", "status"))
+
+
+        val secondJob = Job(startTime = LocalDateTime.now().minusDays(3).truncatedTo(ChronoUnit.MILLIS),  // Mongo can only store to millis precision breaks "equals"
+                createdOn = ZonedDateTime.of(2010, 1, 1, 1, 1, 0, 0, ZoneId.systemDefault()).truncatedTo(ChronoUnit.MILLIS),
+                endTime = LocalDateTime.now().plusDays(4).truncatedTo(ChronoUnit.MILLIS),
+                jobRef = "second job",
+                payload = SimplePayload("p1", "a user"))
+
+        col.insertOne(secondJob)
+
+        val firstJob = Job(startTime = LocalDateTime.now().minusDays(3).truncatedTo(ChronoUnit.MILLIS),  // Mongo can only store to millis precision breaks "equals"
+                createdOn = ZonedDateTime.of(2009, 1, 1, 1, 1, 0, 0, ZoneId.systemDefault()).truncatedTo(ChronoUnit.MILLIS),
+                endTime = LocalDateTime.now().plusDays(4).truncatedTo(ChronoUnit.MILLIS),
+                jobRef = "first job",
+                payload = SimplePayload("p1", "a user"))
+
+        col.insertOne(firstJob)
+
+        val completedJob = Job(startTime = LocalDateTime.now().minusDays(3).truncatedTo(ChronoUnit.MILLIS),  // Mongo can only store to millis precision breaks "equals"
+                createdOn = ZonedDateTime.of(2008, 1, 1, 1, 1, 0, 0, ZoneId.systemDefault()).truncatedTo(ChronoUnit.MILLIS),
+                endTime = LocalDateTime.now().plusDays(4).truncatedTo(ChronoUnit.MILLIS),
+                jobRef = "completed job",
+                status = JobStatus.COMPLETED,
+                payload = SimplePayload("p1", "a user"))
+
+        col.insertOne(completedJob)
+
+
+        col.find().forEach {
+            println("${it.jobId} :: ${it.jobRef}")
+        }
+
+        val job5 = col.find().filter("""{status: "SUBMITTED"}""").sort("{createdOn: 1}").limit(1).first()
+
+        println(job5)
+
+        assertEquals(3, col.countDocuments())
+        assertEquals(firstJob.jobId, job5.jobId)
+
+    }
+
 
     @Test
     fun getData() {
@@ -87,9 +169,10 @@ class MongoPing {
             val client = KMongo.createClient() //get com.mongodb.MongoClient new instance
             val database = client.getDatabase("work") //normal java driver usage
 
-
             val col = database.getCollection<Job<SimplePayload>>("queue")
+
         col.find().forEach(::println)
+
         }
 }
 
@@ -100,11 +183,39 @@ class MongoPing {
 
 data class Jedi(val name: String, val age: Int)
 
-data class Job<T>(var startTime : LocalDateTime,
-                  var createdOn : LocalDateTime,
-                  var endTime : LocalDateTime,
+// https://www.programmableweb.com/news/rest-api-design-put-type-content-type/2011/11/18
+// See type tunneling - not the type but the format e.g. XML or JSON
+
+data class Job<T>(var startTime : LocalDateTime, //Option<LocalDateTime> = None,
+                  var createdOn : ZonedDateTime = ZonedDateTime.now().truncatedTo(ChronoUnit.MILLIS),
+                  var endTime : LocalDateTime, //Option<LocalDateTime> = None,
                   var priority: Int = 0,
                   val jobId : UUID = UUID.randomUUID(),  // default initialiser - ignored when de-serialised from the database
+                  val contentType : String = "unknown",  // not in HTTP header as that would be JSON
+                  val status : JobStatus = JobStatus.SUBMITTED,
+                  val jobRef : String = "user job name",
                   var payload : T)
 
 data class SimplePayload(val queryParam : String, val submitter : String)
+
+
+sealed class Option<out A>
+object None : Option<Nothing>()
+data class Some<out B>(val value: B) : Option<B>()
+
+
+enum class JobStatus {
+    SUBMITTED,
+    CANCELLED,
+    COMPLETED,
+    IN_PROGRESS
+}
+
+fun <TDocument> MongoCollection<TDocument>.find1(filter : Bson) : Option<TDocument> {
+    val doc = findOne(filter)
+
+    return if (doc == null) {
+        None
+    } else Some(doc)
+}
+

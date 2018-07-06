@@ -39,6 +39,8 @@ dependencies {
         compile("org.apache.logging.log4j:log4j-slf4j-impl:$log4j2_ver")
         compile("com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:2.9.6")
         compile("com.fasterxml.jackson.core:jackson-databind:2.9.6")
+        compile "com.fasterxml.jackson.module:jackson-module-kotlin:2.9.+"
+
 
         compile("io.javalin:javalin:1.6.1")
 
