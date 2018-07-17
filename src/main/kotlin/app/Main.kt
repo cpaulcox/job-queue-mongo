@@ -6,14 +6,12 @@ import com.mongodb.client.model.IndexOptions
 import com.mongodb.client.model.Indexes
 import io.javalin.ApiBuilder.*
 import io.javalin.Javalin
+import io.javalin.event.EventType
 import org.apache.logging.log4j.LogManager
 import org.litote.kmongo.eq
 import org.litote.kmongo.findOne
 import org.litote.kmongo.getCollection
-import org.litote.kmongo.json
 import java.time.LocalDateTime
-import java.time.ZoneOffset
-import java.time.ZonedDateTime
 import java.time.temporal.ChronoUnit
 import java.util.concurrent.TimeUnit
 
@@ -33,7 +31,12 @@ fun main(args: Array<String>) {
         port(7000)
         exception(Exception::class.java) { e, ctx -> e.printStackTrace() }
         error(404) { ctx -> ctx.json("not found") }
-    }.start()
+    }.event(EventType.SERVER_STOPPING) {
+        logger.info("Shutting down Mongo client")
+        MongoDb.close()
+    }
+
+    .start()
 
     app.routes {
 
