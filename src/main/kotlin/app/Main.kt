@@ -1,7 +1,5 @@
 package app
 
-import app.user.User
-import app.user.UserDao
 import com.mongodb.client.model.IndexOptions
 import com.mongodb.client.model.Indexes
 import io.javalin.ApiBuilder.*
@@ -14,6 +12,7 @@ import org.litote.kmongo.getCollection
 import java.time.LocalDateTime
 import java.time.temporal.ChronoUnit
 import java.util.concurrent.TimeUnit
+import kotlin.properties.Delegates
 
 fun main(args: Array<String>) {
 
@@ -24,8 +23,6 @@ fun main(args: Array<String>) {
     }
 
     val jobDB by MongoDb
-
-    val userDao = UserDao()
 
     val app = Javalin.create().apply {
         port(7000)
@@ -69,8 +66,11 @@ fun main(args: Array<String>) {
 
         }
 
+        // TODO add job category parameter that maps to different Mongo collections
         get("/jobs") { ctx ->
-            val col = jobDB.getCollection<Job<SimplePayload>>("queue")
+
+            val db by MongoDb
+            val col = db.getCollection<Job<SimplePayload>>("queue")
 
 
             val list = mutableListOf<Job<SimplePayload>>()
@@ -80,39 +80,5 @@ fun main(args: Array<String>) {
             ctx.contentType("application/json")
             ctx.json(list)
         }
-
-        get("/users") { ctx ->
-            ctx.json(userDao.users)
-        }
-
-        get("/users/:id") { ctx ->
-            ctx.json(userDao.findById(ctx.param("id")!!.toInt())!!)
-        }
-
-        get("/users/email/:email") { ctx ->
-            ctx.json(userDao.findByEmail(ctx.param("email")!!)!!)
-        }
-
-        post("/users/create") { ctx ->
-            val user = ctx.bodyAsClass(User::class.java)
-            userDao.save(name = user.name, email = user.email)
-            ctx.status(201)
-        }
-
-        patch("/users/update/:id") { ctx ->
-            val user = ctx.bodyAsClass(User::class.java)
-            userDao.update(
-                    id = ctx.param("id")!!.toInt(),
-                    user = user
-            )
-            ctx.status(204)
-        }
-
-        delete("/users/delete/:id") { ctx ->
-            userDao.delete(ctx.param("id")!!.toInt())
-            ctx.status(204)
-        }
-
     }
-
 }
