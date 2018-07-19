@@ -1,6 +1,7 @@
 package app
 
 import com.mongodb.MongoClient
+import com.mongodb.MongoClientOptions
 import com.mongodb.client.MongoDatabase
 import org.litote.kmongo.KMongo
 import kotlin.reflect.KProperty
@@ -31,6 +32,8 @@ class MongoDb {
 
         val logger = LogManager.getLogger(this::class)
 
+        val clientOptions = MongoClientOptions.builder()
+
         lateinit var databaseName : String
 
         private var client : MongoClient? = null // fudge around lateinit
@@ -40,7 +43,7 @@ class MongoDb {
             // TODO create client should be thread-safe to avoid racing
 
             if (client == null) {
-                client = KMongo.createClient()
+                client = KMongo.createClient("localhost", clientOptions.build())
 
                 logger.info("Mongo Client Created")
                 logger.info("Client settings: ${client!!.mongoClientOptions}")

@@ -3,8 +3,10 @@ package mongo
 import app.*
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.mongodb.client.MongoCollection
+import com.mongodb.client.model.FindOneAndUpdateOptions
 import com.mongodb.client.model.IndexOptions
 import com.mongodb.client.model.Indexes
+import org.bson.Document
 import org.bson.conversions.Bson
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
@@ -25,25 +27,6 @@ class MongoPing {
     @BeforeEach
     fun initKotlinMapper() {
         val mapper = jacksonObjectMapper()
-    }
-
-    @Test
-    fun connectionTest()  {
-
-
-        val client = KMongo.createClient() //get com.mongodb.MongoClient new instance
-        val database = client.getDatabase("test") //normal java driver usage
-        val col = database.getCollection<Jedi>() //KMongo extension method
-//here the name of the collection by convention is "jedi"
-//you can use getCollection<Jedi>("otherjedi") if the collection name is different
-
-        col.insertOne(Jedi("Luke Skywalker", 19))
-
-        val yoda : Jedi? = col.findOne(Jedi::name eq "Yoda")
-        println(yoda)
-
-        val luke : Jedi? = col.findOne(Jedi::name eq "Luke Skywalker")
-        println(luke)
     }
 
     // From http://learnmongodbthehardway.com/schema/queues/
@@ -67,9 +50,9 @@ class MongoPing {
 
         println("UTC Time: ${ZonedDateTime.now( ZoneOffset.UTC )}")
 
-        val job = Job(startTime = LocalDateTime.now().minusDays(3).truncatedTo(ChronoUnit.MILLIS),  // Mongo can only store to millis precision breaks "equals"
+        val job = Job(startTime = ZonedDateTime.now().minusDays(3).truncatedTo(ChronoUnit.MILLIS).toString(),  // Mongo can only store to millis precision breaks "equals"
                         //createdOn = ZonedDateTime.now().truncatedTo(ChronoUnit.MILLIS),
-                        endTime = LocalDateTime.now().plusDays(4).truncatedTo(ChronoUnit.MILLIS),
+                        endTime = LocalDateTime.now().plusDays(4).truncatedTo(ChronoUnit.MILLIS).toString(),
                         payload = SimplePayload("p1", "paul"))
 
         col.insertOne(job)
@@ -124,47 +107,54 @@ class MongoPing {
         col.createIndex(Indexes.ascending("createdOn", "status"))
 
 
-        val secondJob = Job(startTime = LocalDateTime.now().minusDays(3).truncatedTo(ChronoUnit.MILLIS),  // Mongo can only store to millis precision breaks "equals"
-                createdOn = ZonedDateTime.of(2010, 1, 1, 1, 1, 0, 0, ZoneId.systemDefault()).truncatedTo(ChronoUnit.MILLIS),
-                endTime = LocalDateTime.now().plusDays(4).truncatedTo(ChronoUnit.MILLIS),
+        val secondJob = Job(startTime = ZonedDateTime.now().minusDays(3).truncatedTo(ChronoUnit.MILLIS).toString(),  // Mongo can only store to millis precision breaks "equals"
+                createdOn = ZonedDateTime.of(2010, 1, 1, 1, 1, 0, 0, ZoneId.systemDefault()).truncatedTo(ChronoUnit.MILLIS).toString(),
+                endTime = LocalDateTime.now().plusDays(4).truncatedTo(ChronoUnit.MILLIS).toString(),
                 jobRef = "second job",
                 payload = SimplePayload("p1", "a user"))
 
         col.insertOne(secondJob)
 
-        val firstJob = Job(startTime = LocalDateTime.now().minusDays(3).truncatedTo(ChronoUnit.MILLIS),  // Mongo can only store to millis precision breaks "equals"
-                createdOn = ZonedDateTime.of(2009, 1, 1, 1, 1, 0, 0, ZoneId.systemDefault()).truncatedTo(ChronoUnit.MILLIS),
-                endTime = LocalDateTime.now().plusDays(4).truncatedTo(ChronoUnit.MILLIS),
+        val firstJob = Job(startTime = ZonedDateTime.now().minusDays(3).truncatedTo(ChronoUnit.MILLIS).toString(),  // Mongo can only store to millis precision breaks "equals"
+                createdOn = ZonedDateTime.of(2009, 1, 1, 1, 1, 0, 0, ZoneId.systemDefault()).truncatedTo(ChronoUnit.MILLIS).toString(),
+                endTime = LocalDateTime.now().plusDays(4).truncatedTo(ChronoUnit.MILLIS).toString(),
                 jobRef = "first job",
                 payload = SimplePayload("p1", "a user"))
 
         col.insertOne(firstJob)
 
-        val completedJob = Job(startTime = LocalDateTime.now().minusDays(3).truncatedTo(ChronoUnit.MILLIS),  // Mongo can only store to millis precision breaks "equals"
-                createdOn = ZonedDateTime.of(2008, 1, 1, 1, 1, 0, 0, ZoneId.systemDefault()).truncatedTo(ChronoUnit.MILLIS),
-                endTime = LocalDateTime.now().plusDays(4).truncatedTo(ChronoUnit.MILLIS),
+        val completedJob = Job(startTime = ZonedDateTime.now().minusDays(3).truncatedTo(ChronoUnit.MILLIS).toString(),  // Mongo can only store to millis precision breaks "equals"
+                createdOn = ZonedDateTime.of(2008, 1, 1, 1, 1, 0, 0, ZoneId.systemDefault()).truncatedTo(ChronoUnit.MILLIS).toString(),
+                endTime = LocalDateTime.now().plusDays(4).truncatedTo(ChronoUnit.MILLIS).toString(),
                 jobRef = "completed job",
                 status = JobStatus.COMPLETED,
                 payload = SimplePayload("p1", "a user"))
 
         col.insertOne(completedJob)
 
+        val filter = Document("status", JobStatus.SUBMITTED.name)
+        val update = Document("status", JobStatus.IN_PROGRESS.name)
+        val update2 = Document("\$set", update)
+        val options = FindOneAndUpdateOptions().sort(Document("createdOn", 1))
+        //val sort = Document("createdOn", 1)
+
+        val found = col.find(filter)
+        println(found.count())
+
+        val original = col.findOneAndUpdate(filter, update2, options )
 
         col.find().forEach {
-            println("${it.jobId} :: ${it.jobRef}")
+            println("${it.jobId} :: ${it.jobRef} ${it.status}")
         }
 
-        val job5 = col.find().filter("""{status: "SUBMITTED"}""").sort("{createdOn: 1}").limit(1).first()
+        val job5 = col.find().filter("""{status: "IN_PROGRESS"}""").sort("{createdOn: 1}").limit(1).first()
 
         println(job5)
+        println(original)
 
         assertEquals(3, col.countDocuments())
         assertEquals(firstJob.jobId, job5.jobId)
 
    }
 }
-
-
-
-data class Jedi(val name: String, val age: Int)
 

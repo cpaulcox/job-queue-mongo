@@ -16,9 +16,10 @@ import java.util.*
 // https://www.programmableweb.com/news/rest-api-design-put-type-content-type/2011/11/18
 // See type tunneling - not the type but the format e.g. XML or JSON
 
-data class Job<T>(var startTime : LocalDateTime, //Option<LocalDateTime> = None,
-                  var createdOn : ZonedDateTime = ZonedDateTime.now().truncatedTo(ChronoUnit.MILLIS),
-                  var endTime : LocalDateTime, //Option<LocalDateTime> = None,
+// date times converted to strings to deal with time zones
+data class Job<T>(var startTime : String, //Option<LocalDateTime> = None,
+                  var createdOn : String = ZonedDateTime.now().truncatedTo(ChronoUnit.MILLIS).toString(),
+                  var endTime : String, //Option<LocalDateTime> = None,
                   var priority: Int = 0,
                   val jobId : UUID = UUID.randomUUID(),  // default initialiser - ignored when de-serialised from the database
                   val contentType : String = "unknown",  // not in HTTP header as that would be JSON
@@ -49,3 +50,4 @@ fun <TDocument> MongoCollection<TDocument>.find1(filter : Bson) : Option<TDocume
     } else Some(doc)
 }
 
+data class TotalJobs(val count : Long = 0)

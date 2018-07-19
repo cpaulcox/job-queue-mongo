@@ -40,6 +40,7 @@ dependencies {
         compile("com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:2.9.6")
         compile("com.fasterxml.jackson.core:jackson-databind:2.9.6")
         compile "com.fasterxml.jackson.module:jackson-module-kotlin:2.9.+"
+        compile("com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.9.6")
 
 
         compile("io.javalin:javalin:1.6.1")
@@ -53,6 +54,9 @@ dependencies {
         testCompile("org.junit.jupiter:junit-jupiter-api:$junit_jupiter_ver")
         testRuntime("org.junit.jupiter:junit-jupiter-engine:$junit_jupiter_ver")
         testRuntime("org.junit.platform:junit-platform-launcher:$junit_platform_ver")
+
+        testCompile("com.github.kittinunf.fuel:fuel:1.14.0")
+        testCompile("com.github.kittinunf.fuel:fuel-jackson:1.14.0")
     }
 
     test {
