@@ -13,6 +13,7 @@ import org.litote.kmongo.getCollection
 import java.time.LocalDateTime
 import java.time.ZonedDateTime
 import java.time.temporal.ChronoUnit
+import java.util.*
 import java.util.concurrent.TimeUnit
 
 fun main(args: Array<String>) {
@@ -63,6 +64,9 @@ fun main(args: Array<String>) {
 
                 // Next Job Index
                 col.createIndex(Indexes.ascending("createdOn", "status"), IndexOptions().name("Next Job Index"))
+
+                col.createIndex(Indexes.ascending("jobId"), IndexOptions().name("Job ID Index"))  //randomness of indexes with UUIDs
+
             } catch (e: MongoCommandException) {  // TODO Needs finer grained error checking to deal with other error cases.
                 logger.error("Duplicate queue creation for $queue")
             }
@@ -79,9 +83,16 @@ fun main(args: Array<String>) {
 
             val queue = ctx.param("queue") ?: "default"  // default avoids NPE but in reality can't happen due to URL parsing (404)
 
-            val col = db.getCollection(queue)  // lots of queue config parameters can be supplied optionally
+            if (!db.listCollectionNames().contains(queue)) {  // Cannot use getCollection as it lazily creates but with no configuration!
+                ctx.status(404)
+                ctx.result("Queue does not exist")
+            }
+            else {
 
-            col.drop()
+                val col = db.getCollection(queue)  // lots of queue config parameters can be supplied optionally
+
+                col.drop()
+            }
         }
 
 
@@ -109,7 +120,7 @@ fun main(args: Array<String>) {
             ctx.status(202)
         }
 
-        // TODO add job category parameter that maps to different Mongo collections
+
         get("/jobs/:queue") { ctx ->
 
             val queue = ctx.param("queue") ?: "default"  // TODO remove default
@@ -125,6 +136,28 @@ fun main(args: Array<String>) {
             ctx.contentType("application/json")
             ctx.json(list)
         }
+
+        get("/job/:queue/id/:id") { ctx ->
+
+            val queue = ctx.param("queue") ?: "default"  // TODO remove default
+            val id = ctx.param("id") ?: "----"  // TODO remove default
+
+            val db by MongoDb
+            val col = db.getCollection<Job<SimplePayload>>(queue)
+
+
+
+            val job = col.find(Document("jobId", UUID.fromString(id)))
+
+            if (job.none()) {
+                ctx.status(404)
+            }
+            else {
+                //ctx.contentType("application/json")
+                ctx.json(job.first() as Job<SimplePayload>)
+            }
+        }
+
 
         get("/nextjob/:queue") {ctx ->
 

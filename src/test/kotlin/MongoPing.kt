@@ -80,6 +80,9 @@ class MongoPing {
         println(job3)
         assertEquals(job.jobId, job3?.jobId)  // jobs3 can be null
 
+        val job6 = col.find(Document("jobId", job3!!.jobId))
+        println("job6 ${job6.first().jobId}")
+
         col.find().forEach(::println)
 
         val job4 = col.find1(Job<SimplePayload>::priority eq 1)

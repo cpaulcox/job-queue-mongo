@@ -9,7 +9,9 @@ import com.github.kittinunf.fuel.httpPost
 import com.github.kittinunf.fuel.httpPut
 import com.github.kittinunf.fuel.jackson.responseObject
 import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.Assertions
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.fail
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 
@@ -56,6 +58,15 @@ class IntegrationTest {
         assertEquals(201, qResp.statusCode)
     }
 
+
+    @Test
+    fun deleteMissingQueue() {
+        val (_, qResp, _) = "http://localhost:7000/queue/missingQ".httpDelete().responseString()
+
+
+        assertEquals(404, qResp.statusCode)  // assert in BeforeEach?
+
+    }
     /**
      * delete and count test each other - multiple assertions as need to check both the status code and actual result
      */
@@ -130,6 +141,31 @@ class IntegrationTest {
 
 
     // do the empty queue test - add one, process and do a next get
+
+    @Test
+    fun getJobsByStatus() {
+
+        fail<Any>("")
+    }
+
+    @Test
+    fun getJobById() {
+        val (_, _, add1) = "http://localhost:7000/addjob/testQ".httpPost().responseObject<Job<SimplePayload>>()
+
+        val id = add1.component1()!!.jobId
+        val (_, jobResp, jobResult) = "http://localhost:7000/job/testQ/id/$id".httpGet().responseObject<Job<SimplePayload>>()
+
+
+        assertEquals(200, jobResp.statusCode)
+        assertEquals(add1.component1()!!.jobId, jobResult.component1()!!.jobId)
+
+    }
+
+    @Test
+    fun cancelJob() {
+
+        fail<Any>("")
+    }
 
 
 }
