@@ -1,6 +1,9 @@
 package app
 
 import com.mongodb.MongoCommandException
+import com.mongodb.MongoException
+import com.mongodb.MongoServerException
+import com.mongodb.client.MongoCollection
 import com.mongodb.client.model.*
 import io.javalin.ApiBuilder.*
 import io.javalin.Javalin
@@ -10,6 +13,7 @@ import org.bson.Document
 import org.litote.kmongo.eq
 import org.litote.kmongo.findOne
 import org.litote.kmongo.getCollection
+import java.lang.IllegalStateException
 import java.time.LocalDateTime
 import java.time.ZonedDateTime
 import java.time.temporal.ChronoUnit
@@ -19,7 +23,6 @@ import java.util.concurrent.TimeUnit
 fun main(args: Array<String>) {
 
 
-    val logger = LogManager.getLogger("Main")
 
     MongoDb.apply {
         databaseName = "work"
@@ -29,7 +32,7 @@ fun main(args: Array<String>) {
         clientOptions.connectionsPerHost(10)
     }
 
-    val jobDB by MongoDb
+    val logger = LogManager.getLogger("routes")
 
     val app = Javalin.create().apply {
         port(7000)
@@ -37,10 +40,44 @@ fun main(args: Array<String>) {
         //error(404) { ctx -> ctx.json("not found") }  generic error handler - can't override on a case-by-case basis?
     }.event(EventType.SERVER_STOPPING) {
         logger.info("Shutting down Mongo client")
-        MongoDb.close()
+        MongoDb.clientDelegate!!.close()
     }
-
     .start()
+
+    addMongoExceptionHandlers(app)
+    configureRoutes(app)
+}
+
+// exception handlers will pick the most specific class  https://javalin.io/documentation#exception-mapping
+fun addMongoExceptionHandlers(app: Javalin) {
+    val logger = LogManager.getLogger("MongoEexceptionLogger")
+
+
+    app.apply {
+        exception(IllegalStateException::class.java) { e, ctx ->
+            logger.error(e.message)  // TODO needs the actual stack trace to indicate where the exception actually was generated
+            ctx.status(500)
+        }
+        exception(MongoException::class.java) { e, ctx ->
+            logger.error("${e::javaClass} ${e.code} ${e.message} ")  // TODO needs the actual stack trace to indicate where the exception actually was generated
+            ctx.status(500)
+        }
+        exception(MongoServerException::class.java) { e, ctx ->
+            logger.error("${e.code} ${e.serverAddress} ${e.message} ")  // TODO needs the actual stack trace to indicate where the exception actually was generated
+            ctx.status(500)
+        }
+        exception(MongoCommandException::class.java) { e, ctx ->
+            logger.error("${e.code} ${e.serverAddress} ${e.errorCode} ${e.message} ")  // TODO needs the actual stack trace to indicate where the exception actually was generated
+            ctx.status(500)
+        }
+    }
+}
+
+fun configureRoutes(app : Javalin) {
+
+    //val jobDB by MongoDb - can be used to initialise once and captured as a closure but as it is called for each access it adds little value?
+
+    val logger = LogManager.getLogger("routes")
 
     app.routes {
 
@@ -99,9 +136,11 @@ fun main(args: Array<String>) {
         // TODO should be a POST with a body NOT hardcoded
         post("/addjob/:queue") { ctx ->
 
+            val db by MongoDb
+
             val queue = ctx.param("queue") ?: "default"
 
-            val col = jobDB.getCollection<Job<SimplePayload>>(queue)
+            val col = db.getCollection<Job<SimplePayload>>(queue)
 
             // ZonedDateTime.now( ZoneOffset.UTC ) // convert to UTC
 
@@ -125,15 +164,13 @@ fun main(args: Array<String>) {
 
             val queue = ctx.param("queue") ?: "default"  // TODO remove default
 
-            val db by MongoDb
-            val col = db.getCollection<Job<SimplePayload>>(queue)
+            val col by MongoColl<Document>(queue)
 
+            val list = mutableListOf<Document>()
 
-            val list = mutableListOf<Job<SimplePayload>>()
-            logger.debug("?????????????????????   BEFORE ${col.find().count()}")
             col.find().forEach { list.add(it) }
-            logger.debug("?????????????????????   AFTER ${col.find().count()}")
-            ctx.contentType("application/json")
+
+//            ctx.contentType("application/json")
             ctx.json(list)
         }
 
@@ -142,19 +179,18 @@ fun main(args: Array<String>) {
             val queue = ctx.param("queue") ?: "default"  // TODO remove default
             val id = ctx.param("id") ?: "----"  // TODO remove default
 
-            val db by MongoDb
-            val col = db.getCollection<Job<SimplePayload>>(queue)
-
+            val col by MongoColl<Job<SimplePayload>>(queue)
 
 
             val job = col.find(Document("jobId", UUID.fromString(id)))
+
 
             if (job.none()) {
                 ctx.status(404)
             }
             else {
                 //ctx.contentType("application/json")
-                ctx.json(job.first() as Job<SimplePayload>)
+                ctx.json(job.first())
             }
         }
 

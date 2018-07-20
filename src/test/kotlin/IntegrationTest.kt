@@ -8,12 +8,8 @@ import com.github.kittinunf.fuel.httpGet
 import com.github.kittinunf.fuel.httpPost
 import com.github.kittinunf.fuel.httpPut
 import com.github.kittinunf.fuel.jackson.responseObject
-import org.junit.jupiter.api.AfterEach
-import org.junit.jupiter.api.Assertions
-import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Assertions.fail
-import org.junit.jupiter.api.BeforeEach
-import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.*
+import org.junit.jupiter.api.Assertions.*
 
 
 /**
@@ -38,8 +34,7 @@ class IntegrationTest {
     fun createQueue() {
         val (_, qResp, _) = "http://localhost:7000/queue/testQ".httpPut().responseString()
 
-
-        assertEquals(201, qResp.statusCode)  // assert in BeforeEach?
+        assertEquals(201, qResp.statusCode)
     }
 
 
@@ -47,12 +42,12 @@ class IntegrationTest {
     fun deleteQueue() {
         val (_, qResp, _) = "http://localhost:7000/queue/testQ".httpDelete().responseString()
 
-
-        assertEquals(200, qResp.statusCode)  // assert in BeforeEach?
+        assertEquals(200, qResp.statusCode)
     }
 
 
     @Test
+    @DisplayName("Adding a queue with the same name is idempotent")
     fun duplicateQueue() {
         val (_, qResp, _) = "http://localhost:7000/queue/testQ".httpPut().responseString()
         assertEquals(201, qResp.statusCode)
@@ -60,25 +55,28 @@ class IntegrationTest {
 
 
     @Test
+    @DisplayName("Removing a non-existent queue will return a 404")
     fun deleteMissingQueue() {
         val (_, qResp, _) = "http://localhost:7000/queue/missingQ".httpDelete().responseString()
 
-
         assertEquals(404, qResp.statusCode)  // assert in BeforeEach?
-
     }
+
     /**
      * delete and count test each other - multiple assertions as need to check both the status code and actual result
      */
     @Test
+    @DisplayName("Deleting all jobs in a queue will result in an empty queue")
     fun deleteJobs() {
 
         val (_, deleteResponse, _) = "http://localhost:7000/jobs/testQ".httpDelete().responseString()
         val (_, countResponse, countResult) = "http://localhost:7000/jobsCount/testQ".httpGet().responseObject<TotalJobs>()
 
-        assertEquals(200, deleteResponse.statusCode)
-        assertEquals(200, countResponse.statusCode)
-        assertEquals(TotalJobs(0), countResult.get())
+        assertAll("The delete call must return 200 and the queue must have zero entries",
+                { assertEquals(200, deleteResponse.statusCode) },
+                { assertEquals(200, countResponse.statusCode) },
+                { assertEquals(TotalJobs(0), countResult.get()) }
+                )
     }
 
 
@@ -89,7 +87,6 @@ class IntegrationTest {
 
         assertEquals(200, countResponse.statusCode)
         assertEquals(TotalJobs(0), countResult.get())
-
 
         val (_, response, addResult) = "http://localhost:7000/addjob/testQ".httpPost().responseString()
 
@@ -112,14 +109,8 @@ class IntegrationTest {
         assertEquals(200, countResponse.statusCode)
         assertEquals(TotalJobs(0), countResult.get())
 
-
-
-
         val (_, _, add1) = "http://localhost:7000/addjob/testQ".httpPost().responseObject<Job<SimplePayload>>()  // TODO error handling
         val (_, _, add2) = "http://localhost:7000/addjob/testQ".httpPost().responseObject<Job<SimplePayload>>()
-
-        println(add1.component1().toString())
-        println(add2.component1().toString())
 
         val (_, countResponse2, countResult2) = "http://localhost:7000/jobsCount/testQ".httpGet().responseObject<TotalJobs>()
         assertEquals(200, countResponse2.statusCode)
@@ -128,8 +119,6 @@ class IntegrationTest {
         val (_, nextResp, getHead) = "http://localhost:7000/nextjob/testQ".httpGet().responseObject<Job<SimplePayload>>()
 
         assertEquals(200, nextResp.statusCode)
-        println(getHead.component1())
-
 
         val (_, countResponse3, countResult3) = "http://localhost:7000/jobsCount/testQ".httpGet().responseObject<TotalJobs>()
         assertEquals(200, countResponse3.statusCode)
@@ -143,22 +132,31 @@ class IntegrationTest {
     // do the empty queue test - add one, process and do a next get
 
     @Test
-    fun getJobsByStatus() {
+    fun getAllJobs() {
+        val (_, _, add1) = "http://localhost:7000/addjob/testQ".httpPost().responseObject<Job<SimplePayload>>()  // TODO error handling
+        val (_, _, add2) = "http://localhost:7000/addjob/testQ".httpPost().responseObject<Job<SimplePayload>>()
 
-        fail<Any>("")
+        val (_, resp, result) = "http://localhost:7000/jobs/testQ".httpGet().responseObject<List<Job<SimplePayload>>>()
+
+        assertAll("",
+                { assertEquals(200, resp.statusCode) },
+                { assertEquals(2, result.component1()!!.size)}
+        )
     }
 
     @Test
+    @DisplayName("Query a job by the id created when it is submitted")
     fun getJobById() {
-        val (_, _, add1) = "http://localhost:7000/addjob/testQ".httpPost().responseObject<Job<SimplePayload>>()
+        val (_, addResp, addRes) = "http://localhost:7000/addjob/testQ".httpPost().responseObject<Job<SimplePayload>>()
+        assertEquals( 202, addResp.statusCode)
 
-        val id = add1.component1()!!.jobId
+        val id = addRes.component1()!!.jobId
         val (_, jobResp, jobResult) = "http://localhost:7000/job/testQ/id/$id".httpGet().responseObject<Job<SimplePayload>>()
 
-
-        assertEquals(200, jobResp.statusCode)
-        assertEquals(add1.component1()!!.jobId, jobResult.component1()!!.jobId)
-
+        assertAll("Get id call must return 200 and have the same job id as originally added",
+            { assertEquals(200, jobResp.statusCode) },
+            { assertEquals(addRes.component1()!!.jobId, jobResult.component1()!!.jobId) }
+        )
     }
 
     @Test
@@ -166,6 +164,4 @@ class IntegrationTest {
 
         fail<Any>("")
     }
-
-
 }
